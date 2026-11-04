@@ -1,0 +1,8 @@
+{
+  "base_url": "https://canvas.example.com",
+  "courses": [
+    {"id": 101, "slug": "example-course"}
+  ],
+  "allowed_download_hosts": [],
+  "max_download_mb": 50
+}

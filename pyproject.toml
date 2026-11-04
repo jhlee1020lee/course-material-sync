@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77,<83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "course-material-sync"
+version = "0.1.0"
+description = "A small Canvas course-file synchronizer with integrity checks and revision history."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["canvas", "cli", "course-materials", "synchronization"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Education",
+]
+dependencies = []
+
+[project.optional-dependencies]
+canvas = ["playwright>=1.59,<2"]
+dev = ["ruff>=0.11,<1", "build>=1.2,<2"]
+
+[project.scripts]
+course-sync = "course_material_sync.cli:main"
+
+[project.urls]
+Repository = "https://github.com/jhlee1020lee/course-material-sync"
+Issues = "https://github.com/jhlee1020lee/course-material-sync/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
