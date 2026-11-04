@@ -101,7 +101,12 @@ def _canvas_command(args: argparse.Namespace) -> dict:
                     file=sys.stderr,
                 )
                 input()
-                source = CanvasSource(config.base_url, context.request)
+                source = CanvasSource(
+                    config.base_url,
+                    context.request,
+                    allowed_download_hosts=config.allowed_download_hosts,
+                    max_bytes=config.max_bytes,
+                )
                 # Verify access without collecting participants, grades, or submissions.
                 source.list_materials(config.courses[0].id, config.courses[0].slug)
                 return {"schema_version": 1, "status": "login_verified"}

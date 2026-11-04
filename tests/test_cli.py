@@ -4,9 +4,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from types import ModuleType
+from unittest.mock import MagicMock, Mock, patch
 
-from course_material_sync.canvas import AuthRequired
+from course_material_sync.canvas import AuthRequired, CanvasSource
 from course_material_sync.cli import _sync_canvas_source, _workspace_path, main
 from course_material_sync.config import ConfigError
 from course_material_sync.models import Material
@@ -83,6 +84,82 @@ class CliTests(unittest.TestCase):
         code, result, _ = self.invoke(["run", "--config", "missing-config.local.json"])
         self.assertEqual(code, 2)
         self.assertEqual(result["error_code"], "config_unreadable")
+
+    def test_login_honors_explicit_download_hosts_without_allowing_other_hosts(self):
+        base = "https://canvas.example.com"
+        file_url = f"{base}/api/v1/courses/101/files?per_page=100"
+        modules_url = f"{base}/api/v1/courses/101/modules?per_page=100&include%5B%5D=items"
+        payloads = {
+            file_url: [
+                {
+                    "id": 1,
+                    "display_name": "lecture.pdf",
+                    "url": "https://files.example.com/lecture.pdf",
+                    "size": 5,
+                }
+            ],
+            modules_url: [],
+        }
+
+        def get_response(url, **kwargs):
+            response = Mock()
+            response.url = url
+            response.status = 200
+            response.headers = {"content-type": "application/json"}
+            response.body.return_value = json.dumps(payloads[url]).encode()
+            return response
+
+        context = Mock()
+        context.pages = [Mock()]
+        context.request.get.side_effect = get_response
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.return_value = context
+        manager = MagicMock()
+        manager.__enter__.return_value = playwright
+        sync_api = ModuleType("playwright.sync_api")
+        sync_api.sync_playwright = Mock(return_value=manager)
+        fake_modules = {"playwright": ModuleType("playwright"), "playwright.sync_api": sync_api}
+
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.local.json"
+            args = [
+                "login",
+                "--config",
+                str(config_path),
+                "--workspace",
+                str(Path(directory) / "workspace"),
+            ]
+            for hosts, expected_code in [(["files.example.com"], 0), ([], 1)]:
+                with self.subTest(hosts=hosts):
+                    config_path.write_text(
+                        json.dumps(
+                            {
+                                "base_url": base,
+                                "courses": [{"id": 101, "slug": "sample"}],
+                                "allowed_download_hosts": hosts,
+                                "max_download_mb": 2,
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    with (
+                        patch.dict("sys.modules", fake_modules),
+                        patch("builtins.input", return_value=""),
+                        patch(
+                            "course_material_sync.canvas.CanvasSource", wraps=CanvasSource
+                        ) as source,
+                    ):
+                        code, result, _ = self.invoke(args)
+                    self.assertEqual(code, expected_code)
+                    self.assertEqual(source.call_args.kwargs["max_bytes"], 2 * 1024 * 1024)
+                    if hosts:
+                        self.assertEqual(result["status"], "login_verified")
+                    else:
+                        self.assertEqual(result["error_code"], "untrusted_download_origin")
+        self.assertEqual(context.close.call_count, 2)
+        self.assertTrue(
+            all(call.args[0] in payloads for call in context.request.get.call_args_list)
+        )
 
 
 if __name__ == "__main__":
